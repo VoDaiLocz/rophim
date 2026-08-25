@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { InfiniteMovieGrid } from "@/components/infinite-movie-grid";
+import { FilterBar } from "@/components/filter-bar";
 import { getMoviesByCategory, type ListMovie } from "@/lib/ophim-client";
 
 export default function CategoryPage({
@@ -87,6 +88,8 @@ export default function CategoryPage({
             {categoryMap[slug] || `Phim ${slug}`}
           </h1>
         </div>
+
+        <FilterBar />
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-6">

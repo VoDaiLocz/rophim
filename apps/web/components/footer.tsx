@@ -5,21 +5,6 @@ import Image from "next/image";
 
 const SOCIAL_LINKS = [
   {
-    name: "Telegram",
-    url: "https://t.me/congdong_rophim",
-    mark: "TG",
-  },
-  {
-    name: "Discord",
-    url: "https://discord.gg/",
-    mark: "DC",
-  },
-  {
-    name: "X",
-    url: "https://x.com/",
-    mark: "X",
-  },
-  {
     name: "Facebook",
     url: "https://www.facebook.com/",
     mark: "FB",
@@ -35,14 +20,24 @@ const SOCIAL_LINKS = [
     mark: "YT",
   },
   {
-    name: "Threads",
-    url: "https://www.threads.net/",
-    mark: "TH",
+    name: "X",
+    url: "https://x.com/",
+    mark: "X",
+  },
+  {
+    name: "Discord",
+    url: "https://discord.gg/",
+    mark: "DC",
   },
   {
     name: "Instagram",
     url: "https://www.instagram.com/",
     mark: "IG",
+  },
+  {
+    name: "Threads",
+    url: "https://www.threads.net/",
+    mark: "TH",
   },
 ];
 
@@ -56,7 +51,7 @@ const FOOTER_LINKS = [
 
 export const Footer = () => {
   return (
-    <footer className="bg-rophim-footer text-gray-400 py-12 border-t border-white/10">
+    <footer className="bg-[#0b0d14] text-gray-400 py-12 border-t border-white/10">
       <div className="container mx-auto px-4 lg:px-8 text-center">
         {/* Logo & Slogan */}
         <div className="mb-6 flex flex-col items-center">
@@ -73,8 +68,7 @@ export const Footer = () => {
             RoPhim - Trang xem phim online chất lượng cao miễn phí Vietsub,
             thuyết minh, lồng tiếng full HD. Kho phim mới khổng lồ, phim chiếu
             rạp, phim bộ, phim lẻ từ nhiều quốc gia như Việt Nam, Hàn Quốc,
-            Trung Quốc, Thái Lan, Nhật Bản, Âu Mỹ… đa dạng thể loại. Khám phá
-            nền tảng phim trực tuyến hay nhất 2024 chất lượng 4K!
+            Trung Quốc, Thái Lan, Nhật Bản, Âu Mỹ… đa dạng thể loại.
           </p>
         </div>
 
@@ -87,7 +81,7 @@ export const Footer = () => {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={social.name}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#191b24] text-[10px] font-black text-white/55 transition-all hover:border-rophim-primary/50 hover:bg-[#ffd875] hover:text-black"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#191b24] text-[10px] font-black text-white/55 transition-all hover:border-[#ffd875]/50 hover:bg-[#ffd875] hover:text-black"
             >
               {social.mark}
             </a>
@@ -100,7 +94,7 @@ export const Footer = () => {
             <Link
               key={link.name}
               href={link.url}
-              className="hover:text-rophim-primary transition-colors hover:underline decoration-rophim-primary/50 underline-offset-4"
+              className="hover:text-[#ffd875] transition-colors hover:underline decoration-[#ffd875]/50 underline-offset-4"
             >
               {link.name}
             </Link>
@@ -108,13 +102,9 @@ export const Footer = () => {
         </div>
 
         {/* Copyright */}
-        <div className="text-gray-600 text-xs border-t border-gray-800 pt-6">
+        <div className="text-gray-600 text-xs border-t border-white/5 pt-6">
           <p className="mb-4 text-[#ffd875] font-bold text-sm">
-            Tự hào là người Việt Nam, mừng đại lễ ngày 2/9 ❤️
-          </p>
-          <p className="mb-2 opacity-50">
-            Đội ngũ tác giả: trường trẻ nhỏ|https://sgv.edu.vn/vencestore/vua gà
-            nướng|minemall|unimall|
+            Tự hào là người Việt Nam ❤️
           </p>
           <Link href="/" className="mb-6 block">
             <Image

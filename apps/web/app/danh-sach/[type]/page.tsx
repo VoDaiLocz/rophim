@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use, useCallback } from "react";
 import { InfiniteMovieGrid } from "@/components/infinite-movie-grid";
+import { FilterBar } from "@/components/filter-bar";
 import {
   getMoviesByType,
   getLatestMovies,
@@ -77,7 +78,7 @@ export default function ListingPage({
   return (
     <main className="min-h-screen bg-[#0b0d14] text-white">
       <div className="pt-24 container mx-auto px-4 lg:px-8 pb-20">
-        <div className="mb-10 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-8 bg-[#ffd875] rounded-full shadow-[0_0_15px_rgba(255,216,117,0.4)]"></div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter italic uppercase text-white drop-shadow-md">
@@ -90,6 +91,8 @@ export default function ListingPage({
             </div>
           )}
         </div>
+
+        <FilterBar />
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-6">

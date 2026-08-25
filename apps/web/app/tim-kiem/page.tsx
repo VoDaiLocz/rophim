@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { InfiniteMovieGrid } from "@/components/infinite-movie-grid";
+import { FilterBar } from "@/components/filter-bar";
 import { searchMovies, type ListMovie } from "@/lib/ophim-client";
 
 function SearchContent() {
@@ -32,14 +33,16 @@ function SearchContent() {
   return (
     <div className="pt-24 container mx-auto px-4 lg:px-8 pb-20">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="text-2xl md:text-3xl font-black uppercase flex items-center gap-2">
           Kết quả tìm kiếm cho:{" "}
           <span className="text-[#ffd875]">&quot;{query}&quot;</span>
         </h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <p className="text-white/40 text-xs font-bold mt-1 uppercase tracking-wider">
           Tìm thấy {results.length} kết quả
         </p>
       </div>
+
+      <FilterBar />
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-32 space-y-6">

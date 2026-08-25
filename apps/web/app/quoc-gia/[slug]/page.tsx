@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { InfiniteMovieGrid } from "@/components/infinite-movie-grid";
+import { FilterBar } from "@/components/filter-bar";
 import { getMoviesByCountry, type ListMovie } from "@/lib/ophim-client";
 
 export default function CountryPage({
@@ -98,6 +99,8 @@ export default function CountryPage({
             {countryMap[slug] || `Phim ${slug}`}
           </h1>
         </div>
+
+        <FilterBar />
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-6">

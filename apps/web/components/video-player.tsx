@@ -29,70 +29,110 @@ export const VideoPlayer = ({
     if (!artRef.current || isEmbed) return;
 
     let hlsInstance: Hls | null = null;
+    let art: Artplayer | null = null;
 
-    const art = new Artplayer({
-      container: artRef.current,
-      url: url,
-      poster: poster,
-      volume: 0.7,
-      isLive: false,
-      muted: false,
-      autoplay: true,
-      pip: true,
-      autoSize: true,
-      autoMini: true,
-      screenshot: true,
-      setting: true,
-      loop: false,
-      flip: true,
-      playbackRate: true,
-      aspectRatio: true,
-      fullscreen: true,
-      fullscreenWeb: true,
-      subtitleOffset: true,
-      miniProgressBar: true,
-      mutex: true,
-      backdrop: true,
-      playsInline: true,
-      autoPlayback: true,
-      airplay: true,
-      theme: "#ffd875",
-      moreVideoAttr: {
-        crossOrigin: "anonymous",
-      },
-      customType: {
-        m3u8: function (video: HTMLMediaElement, sourceUrl: string) {
-          if (Hls.isSupported()) {
-            if (hlsInstance) {
-              hlsInstance.destroy();
-            }
-            const hls = new Hls({
-              enableWorker: true,
-              lowLatencyMode: true,
-            });
-            hls.loadSource(sourceUrl);
-            hls.attachMedia(video);
-            hlsInstance = hls;
-          } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-            video.src = sourceUrl;
-          } else {
-            art.notice.show = "Định dạng video không được hỗ trợ";
-          }
+    try {
+      art = new Artplayer({
+        container: artRef.current,
+        url: url,
+        poster: poster,
+        volume: 0.7,
+        isLive: false,
+        muted: false,
+        autoplay: true,
+        pip: true,
+        autoSize: true,
+        autoMini: true,
+        screenshot: true,
+        setting: true,
+        loop: false,
+        flip: true,
+        playbackRate: true,
+        aspectRatio: true,
+        fullscreen: true,
+        fullscreenWeb: true,
+        subtitleOffset: true,
+        miniProgressBar: true,
+        mutex: true,
+        backdrop: true,
+        playsInline: true,
+        autoPlayback: true,
+        airplay: true,
+        theme: "#ffd875",
+        moreVideoAttr: {
+          crossOrigin: "anonymous",
         },
-      },
-    });
+        customType: {
+          m3u8: function (video: HTMLMediaElement, sourceUrl: string) {
+            if (Hls.isSupported()) {
+              if (hlsInstance) {
+                hlsInstance.destroy();
+              }
+              const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+              });
+              hls.loadSource(sourceUrl);
+              hls.attachMedia(video);
+              hlsInstance = hls;
+            } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+              video.src = sourceUrl;
+            } else if (art) {
+              art.notice.show = "Định dạng video không được hỗ trợ";
+            }
+          },
+        },
+      });
 
-    if (onReady) {
-      onReady(art);
+      if (onReady && art) {
+        onReady(art);
+      }
+    } catch (err) {
+      console.error("Failed to initialize Artplayer:", err);
     }
 
     return () => {
+      // 1. Clean up Hls instance
       if (hlsInstance) {
-        hlsInstance.destroy();
+        try {
+          hlsInstance.destroy();
+        } catch {
+          // ignore
+        }
         hlsInstance = null;
       }
-      if (art && art.destroy) {
-        art.destroy(false);
+
+      // 2. Clean up Artplayer instance & mini/pip modes
+      if (art) {
+        try {
+          if (art.mini) {
+            art.mini = false;
+          }
+          if (art.pip) {
+            art.pip = false;
+          }
+        } catch {
+          // ignore
+        }
+
+        try {
+          if (typeof art.destroy === "function") {
+            art.destroy(true);
+          }
+        } catch {
+          // ignore
+        }
+        art = null;
+      }
+
+      // 3. Fallback: clean up any lingering detached mini player DOM elements
+      if (typeof document !== "undefined") {
+        const lingeringMinis = document.querySelectorAll(
+          ".art-auto-mini, .art-mini, .artplayer-app.art-auto-mini, .artplayer-mini"
+        );
+        lingeringMinis.forEach((el) => {
+          el.remove();
+        });
       }
     };
   }, [url, poster, title, onReady, isEmbed]);
