@@ -1,19 +1,27 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Clock3, Heart, LogOut, Search, UserCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Clock3, Heart, LogOut, Search, UserCircle, X, Film, Loader2 } from "lucide-react";
 import { useMember } from "./member-provider";
+import { searchMovies, type ListMovie } from "@/lib/ophim-client";
 
 export const Navbar = () => {
-  const [isVisible, setIsVisible] = React.useState(true);
-  const [lastScrollY, setLastScrollY] = React.useState(0);
-  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
-  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ListMovie[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showLiveSearch, setShowLiveSearch] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const { user, openAuth, openLibrary, logout } = useMember();
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       if (currentScrollY > lastScrollY && currentScrollY > 100) {
@@ -26,6 +34,56 @@ export const Navbar = () => {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [lastScrollY]);
+
+  // Debounced live search
+  useEffect(() => {
+    const cleanQuery = searchQuery.trim();
+    if (!cleanQuery || cleanQuery.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchMovies(cleanQuery, 1, 6);
+        if (res.status) {
+          setSearchResults(res.items.slice(0, 5));
+        } else {
+          setSearchResults([]);
+        }
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Click outside to close live search
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setShowLiveSearch(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      setShowLiveSearch(false);
+      router.push(`/tim-kiem?keyword=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
 
   return (
     <header
@@ -70,23 +128,110 @@ export const Navbar = () => {
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-4">
-          <div className="relative flex min-w-0 items-center justify-end w-[min(42vw,150px)] sm:w-[240px] md:w-[350px]">
-            <form className="w-full" action="/tim-kiem">
+          <div ref={searchContainerRef} className="relative flex min-w-0 items-center justify-end w-[min(46vw,170px)] sm:w-[260px] md:w-[360px]">
+            <form className="w-full" onSubmit={handleSearchSubmit}>
               <div className="relative group">
                 <input
-                  name="keyword"
-                  className="w-full bg-white/5 border border-white/10 text-white text-[12px] sm:text-[13px] rounded-full py-1.5 sm:py-2 pl-3 sm:pl-5 pr-9 sm:pr-12 focus:bg-white/10 focus:border-[#ffd875]/40 outline-none shadow-2xl transition-all placeholder:text-white/35"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowLiveSearch(true);
+                  }}
+                  onFocus={() => setShowLiveSearch(true)}
+                  className="w-full bg-white/5 border border-white/10 text-white text-[12px] sm:text-[13px] rounded-full py-1.5 sm:py-2 pl-3 sm:pl-5 pr-14 sm:pr-16 focus:bg-white/10 focus:border-[#ffd875]/60 outline-none shadow-2xl transition-all placeholder:text-white/35"
                   placeholder="Tìm phim..."
                 />
-                <button
-                  type="submit"
-                  aria-label="Tìm kiếm"
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd875]"
-                >
-                  <Search size={16} />
-                </button>
+                <div className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {isSearching ? (
+                    <Loader2 size={15} className="animate-spin text-[#ffd875]" />
+                  ) : searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSearchResults([]);
+                      }}
+                      className="p-1 text-white/40 hover:text-white"
+                    >
+                      <X size={14} />
+                    </button>
+                  ) : null}
+                  <button
+                    type="submit"
+                    aria-label="Tìm kiếm"
+                    className="p-1 text-white/40 group-focus-within:text-[#ffd875] hover:text-white transition-colors"
+                  >
+                    <Search size={15} />
+                  </button>
+                </div>
               </div>
             </form>
+
+            {/* Live Search Autocomplete Modal Dropdown */}
+            {showLiveSearch && searchQuery.trim().length >= 2 && (
+              <div className="absolute top-full right-0 mt-3 w-[min(90vw,380px)] sm:w-[380px] bg-[#11131d]/98 border border-white/10 rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.85)] backdrop-blur-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-3 border-b border-white/5 flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#ffd875]/70 flex items-center gap-1.5">
+                    <Film size={12} />
+                    Gợi ý tìm kiếm
+                  </span>
+                  {isSearching && (
+                    <span className="text-[10px] text-white/30 animate-pulse">Đang tìm...</span>
+                  )}
+                </div>
+
+                <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2 space-y-1.5">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((item) => (
+                      <Link
+                        key={item._id}
+                        href={`/phim/${item.slug}`}
+                        onClick={() => setShowLiveSearch(false)}
+                        className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/10 transition-all group"
+                      >
+                        <div className="relative w-11 h-14 rounded-lg overflow-hidden bg-black/50 shrink-0 border border-white/10">
+                          <Image
+                            src={item.poster_url}
+                            alt={item.name}
+                            fill
+                            sizes="44px"
+                            className="object-cover group-hover:scale-105 transition-transform"
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-white truncate group-hover:text-[#ffd875] transition-colors">
+                            {item.name}
+                          </h4>
+                          <p className="text-[10px] text-white/40 truncate mt-0.5">
+                            {item.origin_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] font-semibold text-[#ffd875] bg-[#ffd875]/10 px-1.5 py-0.5 rounded">
+                              {item.year || "2026"}
+                            </span>
+                            <span className="text-[9px] font-semibold text-white/50 bg-white/5 px-1.5 py-0.5 rounded">
+                              HD Vietsub
+                            </span>
+                          </div>
+                        </div>
+                      </Link>
+                    ))
+                  ) : !isSearching ? (
+                    <div className="py-6 text-center text-xs text-white/40">
+                      Không tìm thấy kết quả phù hợp cho &quot;{searchQuery}&quot;
+                    </div>
+                  ) : null}
+                </div>
+
+                <Link
+                  href={`/tim-kiem?keyword=${encodeURIComponent(searchQuery.trim())}`}
+                  onClick={() => setShowLiveSearch(false)}
+                  className="block p-3 text-center bg-white/5 hover:bg-[#ffd875] text-[11px] font-black uppercase tracking-wider text-white hover:text-black transition-all border-t border-white/5"
+                >
+                  Xem tất cả kết quả &rarr;
+                </Link>
+              </div>
+            )}
           </div>
 
           {user ? (

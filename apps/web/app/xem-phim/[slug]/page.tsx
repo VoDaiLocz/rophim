@@ -1,12 +1,27 @@
 "use client";
 
 import { useEffect, useState, Suspense, use } from "react";
-import { useSearchParams } from "next/navigation";
-import { Play, Star, Share2, List, Zap, MessageCircle } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  Play,
+  Star,
+  Share2,
+  List,
+  Zap,
+  MessageCircle,
+  Moon,
+  Sun,
+  SkipBack,
+  SkipForward,
+  Check,
+  Film,
+} from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { VideoPlayer } from "@/components/video-player";
 import { MovieCarousel } from "@/components/movie-carousel";
+import { CommentsPanel } from "@/components/comments-panel";
+import { MemberMovieActions } from "@/components/member-movie-actions";
 import { useMember } from "@/components/member-provider";
 import { memberClient } from "@/lib/member-client";
 import {
@@ -21,15 +36,19 @@ import {
 function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [movie, setMovie] = useState<DetailMovie | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [latestMovies, setLatestMovies] = useState<ListMovie[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentEpisode, setCurrentEpisode] = useState<{
     name: string;
+    slug: string;
     url: string;
   } | null>(null);
   const [currentServer, setCurrentServer] = useState(0);
+  const [isCinemaMode, setIsCinemaMode] = useState(false);
+  const [copiedToast, setCopiedToast] = useState(false);
   const { user } = useMember();
 
   const tapParam = searchParams.get("tap");
@@ -61,6 +80,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
             if (ep) {
               setCurrentEpisode({
                 name: ep.name,
+                slug: ep.slug,
                 url: ep.link_m3u8 || ep.link_embed,
               });
             }
@@ -97,6 +117,18 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
     return () => window.clearTimeout(timeoutId);
   }, [user, movie, currentEpisode]);
 
+  const handleShare = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(window.location.href);
+        setCopiedToast(true);
+        setTimeout(() => setCopiedToast(false), 3000);
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#0b0d14] text-white flex items-center justify-center">
@@ -111,6 +143,16 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
   }
 
   if (!movie) return null;
+
+  const currentServerEpisodes = episodes[currentServer]?.server_data || [];
+  const currentEpIndex = currentServerEpisodes.findIndex(
+    (e) => e.slug === currentEpisode?.slug || e.name === currentEpisode?.name,
+  );
+  const prevEp = currentEpIndex > 0 ? currentServerEpisodes[currentEpIndex - 1] : null;
+  const nextEp =
+    currentEpIndex >= 0 && currentEpIndex < currentServerEpisodes.length - 1
+      ? currentServerEpisodes[currentEpIndex + 1]
+      : null;
 
   const transformListMovies = (list: ListMovie[]) => {
     return list.map((m) => ({
@@ -129,31 +171,64 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
   const suggestedMovies = transformListMovies(latestMovies);
 
   return (
-    <main className="min-h-screen bg-[#0b0d14] text-white pt-20 overflow-x-hidden">
-      <div className="container mx-auto px-4 lg:px-12 py-8">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-[10px] font-bold text-white/30 uppercase tracking-widest mb-6">
-          <Link href="/" className="hover:text-white transition-colors">
-            RoPhim
-          </Link>
-          <span>/</span>
-          <Link
-            href={`/phim/${movie.slug}`}
-            className="hover:text-white transition-colors"
-          >
-            {movie.name}
-          </Link>
-          <span>/</span>
-          <span className="text-[#ffd875]">
-            Tập {currentEpisode?.name || "Full"}
-          </span>
+    <main className="min-h-screen bg-[#0b0d14] text-white pt-20 overflow-x-hidden relative">
+      {/* Cinema Mode Backdrop */}
+      {isCinemaMode && (
+        <div
+          onClick={() => setIsCinemaMode(false)}
+          className="fixed inset-0 bg-black/95 z-30 transition-opacity duration-500 cursor-pointer"
+          title="Bấm để thoát chế độ rạp phim"
+        />
+      )}
+
+      <div className="container mx-auto px-4 lg:px-12 py-6">
+        {/* Breadcrumbs & Fast Action Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-widest">
+            <Link href="/" className="hover:text-white transition-colors">
+              RoPhim
+            </Link>
+            <span>/</span>
+            <Link
+              href={`/phim/${movie.slug}`}
+              className="hover:text-white transition-colors max-w-[200px] truncate"
+            >
+              {movie.name}
+            </Link>
+            <span>/</span>
+            <span className="text-[#ffd875]">
+              Tập {currentEpisode?.name || "Full"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCinemaMode(!isCinemaMode)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                isCinemaMode
+                  ? "bg-[#ffd875] text-black border-[#ffd875]"
+                  : "bg-white/5 hover:bg-white/10 text-white/70 border-white/10"
+              }`}
+            >
+              {isCinemaMode ? <Sun size={13} /> : <Moon size={13} />}
+              <span>{isCinemaMode ? "Bật đèn" : "Tắt đèn"}</span>
+            </button>
+
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-xs font-bold text-white/70 hover:text-white transition-all relative"
+            >
+              {copiedToast ? <Check size={13} className="text-green-400" /> : <Share2 size={13} />}
+              <span>{copiedToast ? "Đã sao chép link!" : "Chia sẻ"}</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col xl:flex-row gap-8">
           {/* Left: Player & Info */}
           <div className="flex-1 min-w-0">
             {/* Player Wrapper */}
-            <div className="relative group/player mb-6">
+            <div className={`relative mb-4 transition-all duration-300 ${isCinemaMode ? "z-40 shadow-[0_0_80px_rgba(0,0,0,0.9)]" : ""}`}>
               {currentEpisode?.url && (
                 <VideoPlayer
                   url={currentEpisode.url}
@@ -163,31 +238,51 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
               )}
             </div>
 
-            {/* Player Controls / Bar */}
-            <div className="bg-[#191b24] p-5 rounded-xl border border-white/5 flex flex-wrap items-center justify-between gap-6 mb-8">
-              <div className="flex items-center gap-4">
-                <h1 className="text-xl md:text-2xl font-black uppercase tracking-tighter">
+            {/* Quick Episode Navigation & Control Bar */}
+            <div className="bg-[#191b24] p-4 sm:p-5 rounded-2xl border border-white/5 flex flex-wrap items-center justify-between gap-4 mb-6">
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl font-black uppercase tracking-tight truncate">
                   {movie.name}{" "}
                   <span className="text-[#ffd875]">
                     — Tập {currentEpisode?.name}
                   </span>
                 </h1>
+                <p className="text-xs text-white/40 mt-0.5 truncate">{movie.origin_name}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all">
-                  <Share2 size={16} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    Chia sẻ
-                  </span>
-                </button>
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-[#ffd875] text-black rounded-full font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all">
-                  <Star size={14} className="fill-black" />
-                  Thêm vào rổ
-                </button>
+
+              {/* Episode Step Controller & Actions */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                {prevEp && (
+                  <button
+                    onClick={() => router.push(`/xem-phim/${movie.slug}?tap=${prevEp.slug}`)}
+                    className="flex items-center gap-1 px-3.5 py-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 text-xs font-bold text-white/80 transition-all"
+                  >
+                    <SkipBack size={14} />
+                    <span className="hidden sm:inline">Tập trước ({prevEp.name})</span>
+                  </button>
+                )}
+
+                {nextEp && (
+                  <button
+                    onClick={() => router.push(`/xem-phim/${movie.slug}?tap=${nextEp.slug}`)}
+                    className="flex items-center gap-1 px-4 py-2 bg-[#ffd875] hover:brightness-110 text-black rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md"
+                  >
+                    <span>Tập tiếp ({nextEp.name})</span>
+                    <SkipForward size={14} />
+                  </button>
+                )}
+
+                <MemberMovieActions
+                  movie={{
+                    movieSlug: movie.slug,
+                    movieTitle: movie.name,
+                    posterUrl: movie.poster_url,
+                  }}
+                />
               </div>
             </div>
 
-            {/* Servers & Episodes Mobile (Shown only if multiple servers) */}
+            {/* Servers & Episodes Mobile */}
             <div className="xl:hidden mb-8 space-y-6">
               <EpisodeList
                 episodes={episodes}
@@ -199,7 +294,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
             </div>
 
             {/* Description Section */}
-            <div className="bg-[#191b24] p-8 rounded-2xl border border-white/5 relative overflow-hidden group">
+            <div className="bg-[#191b24] p-6 sm:p-8 rounded-2xl border border-white/5 relative overflow-hidden group mb-8">
               <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
                 <Play size={120} className="text-white fill-white" />
               </div>
@@ -210,7 +305,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                     Chi tiết phim
                   </h3>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 mb-8 text-[12px] font-bold uppercase tracking-widest text-white/40">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-6 text-[12px] font-bold uppercase tracking-widest text-white/40">
                   <div className="space-y-1">
                     <span>Năm sản xuất</span>
                     <p className="text-white text-sm">{movie.year}</p>
@@ -228,7 +323,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                   <div className="space-y-1">
                     <span>Quốc gia</span>
                     <p className="text-white text-sm">
-                      {movie.country?.[0]?.name}
+                      {movie.country?.[0]?.name || "Đang cập nhật"}
                     </p>
                   </div>
                 </div>
@@ -238,6 +333,15 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                 />
               </div>
             </div>
+
+            {/* Comments Area */}
+            <CommentsPanel
+              movie={{
+                movieSlug: movie.slug,
+                movieTitle: movie.name,
+                posterUrl: movie.poster_url,
+              }}
+            />
           </div>
 
           {/* Right: Sidebar - Episode List & Ranking */}
@@ -253,26 +357,6 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
               />
             </div>
 
-            {/* Support / Chatbox placeholder */}
-            <div className="bg-[#191b24] rounded-2xl border border-white/5 p-6 shadow-2xl overflow-hidden relative">
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl" />
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <MessageCircle className="text-blue-400" size={20} />
-                  <h3 className="text-sm font-black uppercase tracking-widest">
-                    Cộng đồng RoPhim
-                  </h3>
-                </div>
-                <p className="text-xs text-white/40 leading-relaxed mb-6 italic">
-                  &quot;Phim mượt lắm, admin cập nhật tập mới nhanh ghê. Mọi
-                  người xem vui vẻ nhé!&quot;
-                </p>
-                <button className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all">
-                  Tham gia Telegram
-                </button>
-              </div>
-            </div>
-
             {/* Top Ranking Sidebar */}
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -282,7 +366,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                 </h3>
               </div>
               <div className="space-y-4">
-                {suggestedMovies.slice(0, 5).map((m) => (
+                {suggestedMovies.slice(0, 6).map((m) => (
                   <Link
                     key={m.id}
                     href={`/phim/${m.slug}`}
@@ -322,7 +406,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
         </div>
 
         {/* Bottom Carousels */}
-        <div className="mt-20">
+        <div className="mt-16">
           <MovieCarousel title="Có thể bạn quan tâm" items={suggestedMovies} />
         </div>
       </div>
