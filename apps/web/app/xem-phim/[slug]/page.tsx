@@ -33,6 +33,18 @@ import {
   type ServerData,
 } from "@/lib/ophim-client";
 
+const formatEpisodeName = (name?: string) => {
+  if (!name) return "";
+  const trimmed = name.trim();
+  if (/^tập\s+/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return `Tập ${trimmed}`;
+  }
+  return trimmed;
+};
+
 function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const searchParams = useSearchParams();
@@ -197,7 +209,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
             </Link>
             <span>/</span>
             <span className="text-[#ffd875]">
-              Tập {currentEpisode?.name || "Full"}
+              {formatEpisodeName(currentEpisode?.name || "Full")}
             </span>
           </div>
 
@@ -233,7 +245,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                 <VideoPlayer
                   url={currentEpisode.url}
                   poster={movie.thumb_url}
-                  title={`${movie.name} - Tập ${currentEpisode.name}`}
+                  title={`${movie.name} - ${formatEpisodeName(currentEpisode.name)}`}
                 />
               )}
             </div>
@@ -244,7 +256,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                 <h1 className="text-lg sm:text-xl font-black uppercase tracking-tight truncate">
                   {movie.name}{" "}
                   <span className="text-[#ffd875]">
-                    — Tập {currentEpisode?.name}
+                    — {formatEpisodeName(currentEpisode?.name)}
                   </span>
                 </h1>
                 <p className="text-xs text-white/40 mt-0.5 truncate">{movie.origin_name}</p>
@@ -258,7 +270,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                     className="flex items-center gap-1 px-3.5 py-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 text-xs font-bold text-white/80 transition-all"
                   >
                     <SkipBack size={14} />
-                    <span className="hidden sm:inline">Tập trước ({prevEp.name})</span>
+                    <span className="hidden sm:inline">Tập trước ({formatEpisodeName(prevEp.name)})</span>
                   </button>
                 )}
 
@@ -267,7 +279,7 @@ function WatchPageContent({ params }: { params: Promise<{ slug: string }> }) {
                     onClick={() => router.push(`/xem-phim/${movie.slug}?tap=${nextEp.slug}`)}
                     className="flex items-center gap-1 px-4 py-2 bg-[#ffd875] hover:brightness-110 text-black rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md"
                   >
-                    <span>Tập tiếp ({nextEp.name})</span>
+                    <span>Tập tiếp ({formatEpisodeName(nextEp.name)})</span>
                     <SkipForward size={14} />
                   </button>
                 )}
@@ -467,7 +479,7 @@ function EpisodeList({
                   : "bg-white/5 text-white/50 border-white/5 hover:border-[#ffd875]/40 hover:text-[#ffd875]"
               }`}
             >
-              {ep.name}
+              {formatEpisodeName(ep.name)}
             </Link>
           ))}
         </div>

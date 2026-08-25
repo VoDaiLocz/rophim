@@ -24,6 +24,18 @@ import Image from "next/image";
 import { CommentsPanel } from "@/components/comments-panel";
 import { MemberMovieActions } from "@/components/member-movie-actions";
 
+const formatEpisodeName = (name?: string) => {
+  if (!name) return "";
+  const trimmed = name.trim();
+  if (/^tập\s+/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return `Tập ${trimmed}`;
+  }
+  return trimmed;
+};
+
 export default function MovieDetailPage({
   params,
 }: {
@@ -393,7 +405,7 @@ export default function MovieDetailPage({
                           className="text-white/40 group-hover:text-[#191b24] fill-current"
                         />
                       )}
-                      Tập {ep.name}
+                      {formatEpisodeName(ep.name)}
                     </Link>
                   ))}
                 </div>
