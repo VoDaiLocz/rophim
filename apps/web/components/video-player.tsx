@@ -18,18 +18,26 @@ export const VideoPlayer = ({
   onReady,
 }: VideoPlayerProps) => {
   const artRef = useRef<HTMLDivElement>(null);
+  const isEmbed =
+    typeof url === "string" &&
+    (url.includes("/player/?url=") ||
+      url.includes("/embed/") ||
+      url.includes("youtube.com") ||
+      url.includes("embed"));
 
   useEffect(() => {
-    if (!artRef.current) return;
+    if (!artRef.current || isEmbed) return;
+
+    let hlsInstance: Hls | null = null;
 
     const art = new Artplayer({
       container: artRef.current,
       url: url,
       poster: poster,
-      volume: 0.5,
+      volume: 0.7,
       isLive: false,
       muted: false,
-      autoplay: false,
+      autoplay: true,
       pip: true,
       autoSize: true,
       autoMini: true,
@@ -53,15 +61,22 @@ export const VideoPlayer = ({
         crossOrigin: "anonymous",
       },
       customType: {
-        m3u8: function (video: HTMLMediaElement, url: string) {
+        m3u8: function (video: HTMLMediaElement, sourceUrl: string) {
           if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(url);
+            if (hlsInstance) {
+              hlsInstance.destroy();
+            }
+            const hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+            });
+            hls.loadSource(sourceUrl);
             hls.attachMedia(video);
+            hlsInstance = hls;
           } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-            video.src = url;
+            video.src = sourceUrl;
           } else {
-            art.notice.show = "Unsupported video format";
+            art.notice.show = "Định dạng video không được hỗ trợ";
           }
         },
       },
@@ -72,11 +87,29 @@ export const VideoPlayer = ({
     }
 
     return () => {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
       if (art && art.destroy) {
         art.destroy(false);
       }
     };
-  }, [url, poster, title, onReady]);
+  }, [url, poster, title, onReady, isEmbed]);
+
+  if (isEmbed) {
+    return (
+      <div className="w-full aspect-video rounded-xl overflow-hidden bg-black shadow-2xl transition-all duration-300 border border-white/5 ring-1 ring-white/10">
+        <iframe
+          src={url}
+          title={title || "RoPhim Player"}
+          className="w-full h-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
 
   return (
     <div
