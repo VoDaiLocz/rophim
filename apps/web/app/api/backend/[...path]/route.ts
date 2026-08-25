@@ -12,51 +12,70 @@ type RouteContext = {
 };
 
 async function proxyBackend(request: NextRequest, context: RouteContext) {
-  const { path } = await context.params;
-  const targetUrl = new URL(
-    path.join("/"),
-    `${API_BASE_URL.replace(/\/$/, "")}/`,
-  );
-  targetUrl.search = request.nextUrl.search;
+  try {
+    const { path } = await context.params;
+    const targetUrl = new URL(
+      path.join("/"),
+      `${API_BASE_URL.replace(/\/$/, "")}/`,
+    );
+    targetUrl.search = request.nextUrl.search;
 
-  const requestHeaders = new Headers();
-  const contentType = request.headers.get("content-type");
-  const accept = request.headers.get("accept");
-  const cookie = request.headers.get("cookie");
+    const requestHeaders = new Headers();
+    const contentType = request.headers.get("content-type");
+    const accept = request.headers.get("accept");
+    const cookie = request.headers.get("cookie");
 
-  if (contentType) requestHeaders.set("content-type", contentType);
-  if (accept) requestHeaders.set("accept", accept);
-  if (cookie) requestHeaders.set("cookie", cookie);
+    if (contentType) requestHeaders.set("content-type", contentType);
+    if (accept) requestHeaders.set("accept", accept);
+    if (cookie) requestHeaders.set("cookie", cookie);
 
-  const hasBody = request.method !== "GET" && request.method !== "HEAD";
-  const upstreamResponse = await fetch(targetUrl, {
-    method: request.method,
-    headers: requestHeaders,
-    body: hasBody ? await request.arrayBuffer() : undefined,
-    cache: "no-store",
-  });
+    const hasBody = request.method !== "GET" && request.method !== "HEAD";
+    
+    // 3-second timeout controller so requests never hang indefinitely
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-  const responseHeaders = new Headers();
-  const responseContentType = upstreamResponse.headers.get("content-type");
-  if (responseContentType) {
-    responseHeaders.set("content-type", responseContentType);
+    const upstreamResponse = await fetch(targetUrl, {
+      method: request.method,
+      headers: requestHeaders,
+      body: hasBody ? await request.arrayBuffer() : undefined,
+      cache: "no-store",
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+
+    const responseHeaders = new Headers();
+    const responseContentType = upstreamResponse.headers.get("content-type");
+    if (responseContentType) {
+      responseHeaders.set("content-type", responseContentType);
+    }
+
+    const upstreamHeaders = upstreamResponse.headers as Headers & {
+      getSetCookie?: () => string[];
+    };
+    const setCookies =
+      upstreamHeaders.getSetCookie?.() ||
+      [upstreamResponse.headers.get("set-cookie")].filter(Boolean);
+
+    for (const setCookie of setCookies) {
+      responseHeaders.append("set-cookie", setCookie);
+    }
+
+    return new Response(await upstreamResponse.arrayBuffer(), {
+      status: upstreamResponse.status,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        message: "Máy chủ tạm thời bận, chuyển sang chế độ lưu trữ cục bộ",
+      }),
+      {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
-
-  const upstreamHeaders = upstreamResponse.headers as Headers & {
-    getSetCookie?: () => string[];
-  };
-  const setCookies =
-    upstreamHeaders.getSetCookie?.() ||
-    [upstreamResponse.headers.get("set-cookie")].filter(Boolean);
-
-  for (const setCookie of setCookies) {
-    responseHeaders.append("set-cookie", setCookie);
-  }
-
-  return new Response(await upstreamResponse.arrayBuffer(), {
-    status: upstreamResponse.status,
-    headers: responseHeaders,
-  });
 }
 
 export const GET = proxyBackend;
@@ -65,3 +84,4 @@ export const PUT = proxyBackend;
 export const PATCH = proxyBackend;
 export const DELETE = proxyBackend;
 export const OPTIONS = proxyBackend;
+
