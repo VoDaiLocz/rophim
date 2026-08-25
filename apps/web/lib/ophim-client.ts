@@ -86,12 +86,13 @@ export interface MovieDetailResponse {
   episodes: Episode[];
 }
 
-const OPHIM_BASE_URL = "https://ophim1.com";
-const KKPHIM_V1_API = "https://phim.kkphim.vip/v1/api";
-const NGUONC_V1_API = "https://api.nguonc.com/api";
+const PRIMARY_API_BASE = "https://phimapi.com";
+const BACKUP_API_BASE = "https://ophim.cc";
+const DEFAULT_CDN_IMAGE = "https://phimimg.com";
 
 type ApiMovieItem = Partial<Omit<ListMovie, "year" | "view">> & {
   _id?: string;
+  id?: string;
   name?: string;
   slug?: string;
   origin_name?: string;
@@ -99,19 +100,35 @@ type ApiMovieItem = Partial<Omit<ListMovie, "year" | "view">> & {
   thumb_url?: string;
   year?: number | string;
   view?: number;
+  quality?: string;
+  lang?: string;
+  episode_current?: string;
+  time?: string;
   tmdb?: {
     vote_average?: number | string;
   };
+  imdb?: {
+    vote_average?: number | string;
+  };
+  category?: Category[];
+  country?: Country[];
 };
 
 interface OPhimListApiResponse {
+  status?: boolean | string;
+  msg?: string;
+  message?: string;
   items?: ApiMovieItem[];
   pathImage?: string;
   pagination?: Pagination;
 }
 
 interface V1ListApiResponse {
+  status?: boolean | string;
+  msg?: string;
+  message?: string;
   data?: {
+    APP_DOMAIN_CDN_IMAGE?: string;
     items?: ApiMovieItem[];
     params?: {
       cdnData?: string;
@@ -122,139 +139,173 @@ interface V1ListApiResponse {
 
 const emptyPagination = (): Pagination => ({
   totalItems: 0,
-  totalItemsPerPage: 0,
-  currentPage: 0,
-  totalPages: 0,
+  totalItemsPerPage: 24,
+  currentPage: 1,
+  totalPages: 1,
 });
 
 const failedListResponse = (): LatestMoviesResponse => ({
   status: false,
   items: [],
-  pathImage: "",
+  pathImage: DEFAULT_CDN_IMAGE,
   pagination: emptyPagination(),
 });
 
+export const formatImageUrl = (
+  rawUrl?: string,
+  cdnBase: string = DEFAULT_CDN_IMAGE,
+): string => {
+  if (!rawUrl || typeof rawUrl !== "string" || rawUrl.trim() === "") {
+    return "https://placehold.co/300x450?text=No+Image";
+  }
+
+  const trimmed = rawUrl.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  const base = (cdnBase || DEFAULT_CDN_IMAGE).replace(/\/+$/, "");
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${base}${path}`;
+};
+
+const normalizeSlug = (input: string): string => {
+  const map: Record<string, string> = {
+    "tình cảm": "tinh-cam",
+    "hành động": "hanh-dong",
+    "cổ trang": "co-trang",
+    "hài hước": "hai-huoc",
+    "kinh dị": "kinh-di",
+    "tâm lý": "tam-ly",
+    "hình sự": "hinh-su",
+    "chiến tranh": "chien-tranh",
+    "thể thao": "the-thao",
+    "võ thuật": "vo-thuat",
+    "viễn tưởng": "vien-tuong",
+    "phiêu lưu": "phieu-luu",
+    "khoa học": "khoa-hoc",
+    "âm nhạc": "am-nhac",
+    "thần thoại": "than-thoai",
+    "tài liệu": "tai-lieu",
+    "gia đình": "gia-dinh",
+    "chính kịch": "chinh-kich",
+    "bí ẩn": "bi-an",
+    "học đường": "hoc-duong",
+    "kinh điển": "kinh-dien",
+    "hoạt hình": "hoat-hinh",
+    "chiếu rạp": "chieu-rap",
+  };
+
+  const lower = input.toLowerCase().trim();
+  return map[lower] || lower;
+};
+
 const cleanAndFilterMovies = (
   items: ApiMovieItem[],
-  pathImage: string,
-  isHomeFeed: boolean = true,
+  cdnBase: string = DEFAULT_CDN_IMAGE,
+  isHomeFeed: boolean = false,
 ): ListMovie[] => {
   if (!Array.isArray(items)) return [];
 
   const seenId = new Set<string>();
-  const seenBaseTitle = new Set<string>();
   const cleanItems: ListMovie[] = [];
 
-  // Helper to extract base name accurately
-  const getBaseTitle = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/\(phần\s*\d+\)/g, "")
-      .replace(/phần\s*\d+/g, "")
-      .replace(/season\s*\d+/g, "")
-      .replace(/\(ss\d+\)/g, "")
-      .replace(/ss\d+/g, "")
-      .replace(/part\s*\d+/g, "")
-      .trim();
-  };
-
   for (const item of items) {
-    if (!item.name || !item.slug || !item._id) continue;
-    if (!item.poster_url || item.poster_url.trim() === "") continue;
+    const id = item._id || item.id || item.slug;
+    const slug = item.slug;
+    const name = item.name;
 
-    const itemYear = parseInt(item.year + "") || 0;
-    const currentYear = new Date().getFullYear();
+    if (!name || !slug || !id) continue;
+    if (seenId.has(id) || seenId.has(slug)) continue;
 
-    // PROFESSIONAL FILTER: If on Home Feed, exclude old content appearing in 'Latest'
-    // Metadata updates for old movies (like Stargate 1997) should not pollute the main feed.
-    if (isHomeFeed && itemYear < 2018) continue;
+    const itemYear = parseInt(`${item.year || ""}`, 10) || new Date().getFullYear();
 
-    // STRICTER FILTER for 'HOT' sections: Prioritize movies with TMDB or recent blockbusters
-    // (This helps ensure things like Exhuma, Avatar, etc. stay visible)
-    const hasTMDB = !!item.tmdb;
-    const isVeryRecent = itemYear >= 2023;
+    const rawPoster = item.poster_url || item.thumb_url || "";
+    const rawThumb = item.thumb_url || item.poster_url || "";
 
-    // SEQUEL DEDUPLICATION: Prevent "Phần 1, Phần 2, Phần 3" appearing together
-    const baseTitle = getBaseTitle(item.name);
-    if (seenBaseTitle.has(baseTitle)) continue;
+    if (!rawPoster && !rawThumb) continue;
 
-    // STRICT IMAGE FILTER: Only allow movies with 2 distinct images (Poster & Backdrop)
-    // This ensures the site always looks premium with full assets.
-    if (
-      !item.poster_url ||
-      !item.thumb_url ||
-      item.poster_url === item.thumb_url
-    )
-      continue;
+    seenId.add(id);
+    seenId.add(slug);
 
-    if (seenId.has(item._id) || seenId.has(item.slug)) continue;
+    const verticalPoster = formatImageUrl(rawPoster, cdnBase);
+    const horizontalBackdrop = formatImageUrl(rawThumb, cdnBase);
 
-    seenId.add(item._id);
-    seenId.add(item.slug);
-    seenBaseTitle.add(baseTitle);
-
-    // POSTER QUALITY LOGIC: Ensure we use the best available assets
-    // OPhim standard: poster_url = Horizontal Backdrop, thumb_url = Vertical Poster
-    const verticalPoster = item.thumb_url || item.poster_url;
-    const horizontalBackdrop = item.poster_url || item.thumb_url;
-
-    const finalVertical = verticalPoster.startsWith("http")
-      ? verticalPoster
-      : `${pathImage}${verticalPoster}`;
-    const finalHorizontal = horizontalBackdrop.startsWith("http")
-      ? horizontalBackdrop
-      : `${pathImage}${horizontalBackdrop}`;
+    const ratingVal =
+      item.tmdb?.vote_average ||
+      item.imdb?.vote_average ||
+      (Math.random() * 1.5 + 8.0).toFixed(1);
 
     cleanItems.push({
-      ...item,
-      _id: item._id,
-      name: item.name,
-      slug: item.slug,
-      origin_name: item.origin_name || item.name,
-      thumb_url: finalHorizontal, // For backdrops/sliders
-      poster_url: finalVertical, // For cards
-      year: itemYear || currentYear,
-      view: item.view || Math.floor(Math.random() * 80000) + 20000,
-      rating: item.tmdb?.vote_average || (Math.random() * 2 + 7.8).toFixed(1),
-      // PRO QUALITY FLAG: Used for Slider prioritization
-      isHot: hasTMDB || isVeryRecent || (item.view ?? 0) > 50000,
+      _id: id,
+      name,
+      slug,
+      origin_name: item.origin_name || name,
+      poster_url: verticalPoster,
+      thumb_url: horizontalBackdrop,
+      year: itemYear,
+      view: item.view || Math.floor(Math.random() * 60000) + 15000,
+      rating: ratingVal,
+      quality: item.quality || "HD",
+      lang: item.lang || "Vietsub",
+      episode_current: item.episode_current || "Full",
+      time: item.time,
+      category: item.category,
+      isHot: isHomeFeed || Boolean(item.tmdb || item.imdb),
     });
   }
 
   return cleanItems;
 };
 
+async function fetchWithFallback<T>(path: string): Promise<T | null> {
+  const urls = [
+    `${PRIMARY_API_BASE}${path}`,
+    `${BACKUP_API_BASE}${path}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        next: { revalidate: 1800 },
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "RoPhim/1.0",
+        },
+      });
+
+      if (res.ok) {
+        return (await res.json()) as T;
+      }
+    } catch {
+      // try backup
+    }
+  }
+
+  return null;
+}
+
 export const getLatestMovies = async (
   page: number = 1,
 ): Promise<LatestMoviesResponse> => {
   try {
-    // Fetch 3 pages to get more variety (Total ~60 items)
-    const pagesToFetch = [page, page + 1, page + 2];
-    const responses = await Promise.all(
-      pagesToFetch.map((p) =>
-        fetch(`https://ophim1.com/danh-sach/phim-moi-cap-nhat?page=${p}`, {
-          next: { revalidate: 3600 },
-        }),
-      ),
+    const data = await fetchWithFallback<OPhimListApiResponse>(
+      `/danh-sach/phim-moi-cap-nhat?page=${page}`,
     );
 
-    const results = await Promise.all(
-      responses.map((r) => r.json() as Promise<OPhimListApiResponse>),
-    );
+    if (!data) return failedListResponse();
 
-    const allItems = results.flatMap((res) => res.items || []);
-    const firstResult = results[0];
-    const pathImage =
-      firstResult?.pathImage || "https://img.ophim.live/uploads/movies/";
+    const items = data.items || [];
+    const cdn = data.pathImage || DEFAULT_CDN_IMAGE;
 
     return {
       status: true,
-      items: cleanAndFilterMovies(allItems, pathImage, true),
-      pathImage,
-      pagination: firstResult?.pagination || emptyPagination(),
+      items: cleanAndFilterMovies(items, cdn, true),
+      pathImage: cdn,
+      pagination: data.pagination || emptyPagination(),
     };
   } catch (error) {
-    console.error("Error fetching latest:", error);
+    console.error("Error fetching latest movies:", error);
     return failedListResponse();
   }
 };
@@ -265,31 +316,27 @@ export const getMoviesByType = async (
   isHome: boolean = false,
 ): Promise<LatestMoviesResponse> => {
   try {
-    // Fetch 3 pages for better variety on home
-    const pages = isHome ? [page, page + 1, page + 2] : [page];
-    const responses = await Promise.all(
-      pages.map((p) =>
-        fetch(`https://ophim1.com/v1/api/danh-sach/${type}?page=${p}`, {
-          next: { revalidate: 3600 },
-        }),
-      ),
-    );
-    const dataResults = await Promise.all(
-      responses.map((r) => r.json() as Promise<V1ListApiResponse>),
+    const normalizedType = normalizeSlug(type);
+    const resolvedType =
+      normalizedType === "chieu-rap" ? "phim-le" : normalizedType;
+
+    const data = await fetchWithFallback<V1ListApiResponse>(
+      `/v1/api/danh-sach/${resolvedType}?page=${page}`,
     );
 
-    const allItems = dataResults.flatMap((data) => data.data?.items || []);
+    if (!data || !data.data) return failedListResponse();
 
-    const firstResult = dataResults[0];
-    const pathImage =
-      firstResult?.data?.params?.cdnData ||
-      "https://img.ophim.live/uploads/movies/";
+    const items = data.data.items || [];
+    const cdn =
+      data.data.APP_DOMAIN_CDN_IMAGE ||
+      data.data.params?.cdnData ||
+      DEFAULT_CDN_IMAGE;
 
     return {
       status: true,
-      items: cleanAndFilterMovies(allItems, pathImage, isHome),
-      pathImage: pathImage,
-      pagination: firstResult?.data?.params?.pagination || emptyPagination(),
+      items: cleanAndFilterMovies(items, cdn, isHome),
+      pathImage: cdn,
+      pagination: data.data.params?.pagination || emptyPagination(),
     };
   } catch (error) {
     console.error(`Error fetching type [${type}]:`, error);
@@ -303,30 +350,24 @@ export const getMoviesByCountry = async (
   isHome: boolean = false,
 ): Promise<LatestMoviesResponse> => {
   try {
-    const pages = isHome ? [page, page + 1, page + 2] : [page];
-    const responses = await Promise.all(
-      pages.map((p) =>
-        fetch(`https://ophim1.com/v1/api/quoc-gia/${country}?page=${p}`, {
-          next: { revalidate: 3600 },
-        }),
-      ),
-    );
-    const dataResults = await Promise.all(
-      responses.map((r) => r.json() as Promise<V1ListApiResponse>),
+    const normCountry = normalizeSlug(country);
+    const data = await fetchWithFallback<V1ListApiResponse>(
+      `/v1/api/quoc-gia/${normCountry}?page=${page}`,
     );
 
-    const allItems = dataResults.flatMap((data) => data.data?.items || []);
+    if (!data || !data.data) return failedListResponse();
 
-    const firstResult = dataResults[0];
-    const pathImage =
-      firstResult?.data?.params?.cdnData ||
-      "https://img.ophim.live/uploads/movies/";
+    const items = data.data.items || [];
+    const cdn =
+      data.data.APP_DOMAIN_CDN_IMAGE ||
+      data.data.params?.cdnData ||
+      DEFAULT_CDN_IMAGE;
 
     return {
       status: true,
-      items: cleanAndFilterMovies(allItems, pathImage, isHome),
-      pathImage: pathImage,
-      pagination: firstResult?.data?.params?.pagination || emptyPagination(),
+      items: cleanAndFilterMovies(items, cdn, isHome),
+      pathImage: cdn,
+      pagination: data.data.params?.pagination || emptyPagination(),
     };
   } catch (error) {
     console.error(`Error fetching country [${country}]:`, error);
@@ -340,30 +381,29 @@ export const getMoviesByCategory = async (
   isHome: boolean = false,
 ): Promise<LatestMoviesResponse> => {
   try {
-    const pages = isHome ? [page, page + 1, page + 2] : [page];
-    const responses = await Promise.all(
-      pages.map((p) =>
-        fetch(`https://ophim1.com/v1/api/the-loai/${category}?page=${p}`, {
-          next: { revalidate: 3600 },
-        }),
-      ),
-    );
-    const dataResults = await Promise.all(
-      responses.map((r) => r.json() as Promise<V1ListApiResponse>),
+    const normCat = normalizeSlug(category);
+
+    if (normCat === "chieu-rap") {
+      return getMoviesByType("phim-le", page, isHome);
+    }
+
+    const data = await fetchWithFallback<V1ListApiResponse>(
+      `/v1/api/the-loai/${normCat}?page=${page}`,
     );
 
-    const allItems = dataResults.flatMap((data) => data.data?.items || []);
+    if (!data || !data.data) return failedListResponse();
 
-    const firstResult = dataResults[0];
-    const pathImage =
-      firstResult?.data?.params?.cdnData ||
-      "https://img.ophim.live/uploads/movies/";
+    const items = data.data.items || [];
+    const cdn =
+      data.data.APP_DOMAIN_CDN_IMAGE ||
+      data.data.params?.cdnData ||
+      DEFAULT_CDN_IMAGE;
 
     return {
       status: true,
-      items: cleanAndFilterMovies(allItems, pathImage, isHome),
-      pathImage: pathImage,
-      pagination: firstResult?.data?.params?.pagination || emptyPagination(),
+      items: cleanAndFilterMovies(items, cdn, isHome),
+      pathImage: cdn,
+      pagination: data.data.params?.pagination || emptyPagination(),
     };
   } catch (error) {
     console.error(`Error fetching category [${category}]:`, error);
@@ -378,24 +418,29 @@ export const searchMovies = async (
   isHome: boolean = false,
 ): Promise<LatestMoviesResponse> => {
   try {
-    const res = await fetch(
-      `https://ophim1.com/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&page=${page}&limit=${limit}`,
-    );
-    if (!res.ok) throw new Error("Failed");
-    const data = (await res.json()) as V1ListApiResponse;
+    const cleanKeyword = keyword?.trim();
+    if (!cleanKeyword) return failedListResponse();
 
-    const items = data.data?.items || [];
-    const pathImage =
-      data.data?.params?.cdnData || "https://img.ophim.live/uploads/movies/";
+    const data = await fetchWithFallback<V1ListApiResponse>(
+      `/v1/api/tim-kiem?keyword=${encodeURIComponent(cleanKeyword)}&page=${page}&limit=${limit}`,
+    );
+
+    if (!data || !data.data) return failedListResponse();
+
+    const items = data.data.items || [];
+    const cdn =
+      data.data.APP_DOMAIN_CDN_IMAGE ||
+      data.data.params?.cdnData ||
+      DEFAULT_CDN_IMAGE;
 
     return {
       status: true,
-      items: cleanAndFilterMovies(items, pathImage, isHome),
-      pathImage: pathImage,
-      pagination: data.data?.params?.pagination || emptyPagination(),
+      items: cleanAndFilterMovies(items, cdn, isHome),
+      pathImage: cdn,
+      pagination: data.data.params?.pagination || emptyPagination(),
     };
   } catch (error) {
-    console.error("Error searching:", error);
+    console.error("Error searching movies:", error);
     return failedListResponse();
   }
 };
@@ -404,11 +449,28 @@ export const getMovieDetail = async (
   slug: string,
 ): Promise<MovieDetailResponse | null> => {
   try {
-    const res = await fetch(`${OPHIM_BASE_URL}/phim/${slug}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) throw new Error(`Failed to fetch movie detail: ${slug}`);
-    return res.json();
+    if (!slug) return null;
+
+    const data = await fetchWithFallback<{
+      status: boolean | string;
+      msg?: string;
+      message?: string;
+      movie: DetailMovie;
+      episodes: Episode[];
+    }>(`/phim/${encodeURIComponent(slug)}`);
+
+    if (!data || !data.movie) return null;
+
+    const movie = data.movie;
+    movie.poster_url = formatImageUrl(movie.poster_url);
+    movie.thumb_url = formatImageUrl(movie.thumb_url || movie.poster_url);
+
+    return {
+      status: true,
+      msg: data.msg || data.message || "done",
+      movie,
+      episodes: data.episodes || [],
+    };
   } catch (error) {
     console.error(`Error fetching movie detail [${slug}]:`, error);
     return null;
@@ -420,27 +482,7 @@ export const getMoviesFromKKPhim = async (
   page: number = 1,
   isHome: boolean = false,
 ): Promise<LatestMoviesResponse> => {
-  try {
-    const res = await fetch(`${KKPHIM_V1_API}/danh-sach/${type}?page=${page}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) throw new Error("Failed");
-    const data = (await res.json()) as V1ListApiResponse;
-
-    const items = data.data?.items || [];
-    const pathImage =
-      data.data?.params?.cdnData || "https://phimimg.com/upload/movie/";
-
-    return {
-      status: true,
-      items: cleanAndFilterMovies(items, pathImage, isHome),
-      pathImage: pathImage,
-      pagination: data.data?.params?.pagination || emptyPagination(),
-    };
-  } catch (error) {
-    console.error(`Error fetching KKPhim [${type}]:`, error);
-    return failedListResponse();
-  }
+  return getMoviesByType(type, page, isHome);
 };
 
 export const getMoviesFromNguonC = async (
@@ -448,30 +490,9 @@ export const getMoviesFromNguonC = async (
   page: number = 1,
   isHome: boolean = false,
 ): Promise<LatestMoviesResponse> => {
-  try {
-    const res = await fetch(`${NGUONC_V1_API}/danh-sach/${type}?page=${page}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) throw new Error("Failed");
-    const data = (await res.json()) as V1ListApiResponse;
-
-    const items = data.data?.items || [];
-    const pathImage = data.data?.params?.cdnData || "";
-
-    return {
-      status: true,
-      items: cleanAndFilterMovies(items, pathImage, isHome),
-      pathImage: pathImage,
-      pagination: data.data?.params?.pagination || emptyPagination(),
-    };
-  } catch (error) {
-    console.error(`Error fetching NguonC [${type}]:`, error);
-    return failedListResponse();
-  }
+  return getMoviesByType(type, page, isHome);
 };
 
-export const getImageUrl = (pathImage: string, fileName: string) => {
-  if (!fileName) return "https://placehold.co/300x450?text=No+Image";
-  if (fileName.startsWith("http")) return fileName;
-  return `${pathImage}${fileName}`;
+export const getImageUrl = (pathImage: string, fileName: string): string => {
+  return formatImageUrl(fileName, pathImage);
 };

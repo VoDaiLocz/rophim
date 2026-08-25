@@ -17,10 +17,11 @@ export const GhibliSection = () => {
 
         <div className="relative w-full aspect-[21/9] rounded-3xl overflow-hidden group">
           <Image
-            src="https://img.ophim.live/uploads/movies/vung-dat-linh-hon-thumb.jpg"
+            src="https://phimimg.com/upload/vod/20250716-1/3be680dcb8b627540ea2703730db511f.jpg"
             alt="Studio Ghibli"
             fill
             className="object-cover transition-transform duration-1000 group-hover:scale-105"
+            unoptimized
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
 
@@ -45,7 +46,7 @@ export const GhibliSection = () => {
               </p>
               <div className="flex items-center gap-4 pt-4">
                 <Link
-                  href="/xem-phim/vung-dat-linh-hon"
+                  href="/phim/vung-dat-linh-hon"
                   className="flex items-center gap-2 bg-white text-black px-6 py-2.5 rounded-full font-black uppercase text-xs hover:bg-[#ffd875] transition-colors"
                 >
                   <Play size={14} className="fill-black" />

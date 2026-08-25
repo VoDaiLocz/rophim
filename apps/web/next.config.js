@@ -13,6 +13,36 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
+        hostname: "**.phimimg.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "phimimg.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.phimapi.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "phimapi.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.ophim.cc",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "img.ophim.cc",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "**.ophim.live",
         pathname: "/**",
       },
@@ -29,6 +59,16 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "img.ophim1.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "placehold.co",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
         pathname: "/**",
       },
     ],

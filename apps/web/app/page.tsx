@@ -86,13 +86,13 @@ export default function Home() {
           getMoviesByType("phim-bo", 1, true),
           getMoviesByType("phim-le", 1, true),
           getMoviesByType("hoat-hinh", 1, true),
-          getMoviesByCategory("chiếu rạp", 1, true),
+          getMoviesByType("phim-sap-chieu", 1, true),
           getMoviesByCountry("nhat-ban", 1, true),
           getMoviesByCountry("thai-lan", 1, true),
           getMoviesByCountry("hong-kong", 1, true),
           getMoviesByCategory("co-trang", 1, true),
           getMoviesByCategory("kinh-di", 1, true),
-          getMoviesByCategory("tình cảm", 1, true),
+          getMoviesByCategory("tinh-cam", 1, true),
           // Search queries for user's 6 fixed items (Using page=1, limit=1, isHome=true)
           searchMovies("Còn ra thể thống gì nữa", 1, 1, true),
           searchMovies("Sự trở lại của thẩm phán", 1, 1, true),
@@ -102,7 +102,7 @@ export default function Home() {
           searchMovies("phong lâm hỏa sơn", 1, 1, true),
         ]);
 
-        // CONSOLDIDATE FIXED POSTERS (6 items)
+        // CONSOLIDATE FIXED POSTERS (6 items with fallback to latest/trending)
         const userFixedItems: ListMovie[] = [];
         const searchResults = [fixed1, fixed2, fixed3, fixed4, fixed5, fixed6];
 
@@ -111,7 +111,7 @@ export default function Home() {
           if (firstMovie) {
             if (
               !userFixedItems.some(
-                (existing) => existing._id === firstMovie._id,
+                (existing) => existing._id === firstMovie._id || existing.slug === firstMovie.slug,
               )
             ) {
               userFixedItems.push(firstMovie);
@@ -119,25 +119,34 @@ export default function Home() {
           }
         });
 
-        // CURATED HERO SLIDER: Exactly 6 user-specified movies
-        const curatedHero = userFixedItems.slice(0, 6);
+        // Fill remaining hero slots with top latest movies if search items < 6
+        const heroPool = [
+          ...userFixedItems,
+          ...(latestRes?.items || []),
+          ...(seriesRes?.items || []),
+          ...(singleRes?.items || []),
+        ];
+
+        const curatedHero = Array.from(
+          new Map(heroPool.map((m) => [m.slug || m._id, m])).values(),
+        ).slice(0, 6);
 
         setData({
-          latest: latestRes.items,
-          korean: koreanRes.items,
-          chinese: chineseRes.items,
-          usuk: usukRes.items,
-          series: seriesRes.items,
-          single: singleRes.items,
-          cartoon: cartoonRes.items,
-          cinema: cinemaRes.items,
-          japanese: japaneseRes.items,
-          thai: thaiRes.items,
-          hongkong: hongkongRes.items,
-          costume: costumeRes.items,
-          horror: horrorRes.items,
-          romance: romanceRes.items,
-          hero: curatedHero, // Use curated for slider
+          latest: latestRes?.items || [],
+          korean: koreanRes?.items || [],
+          chinese: chineseRes?.items || [],
+          usuk: usukRes?.items || [],
+          series: seriesRes?.items || [],
+          single: singleRes?.items || [],
+          cartoon: cartoonRes?.items || [],
+          cinema: (cinemaRes?.items?.length ? cinemaRes.items : singleRes?.items) || [],
+          japanese: japaneseRes?.items || [],
+          thai: thaiRes?.items || [],
+          hongkong: hongkongRes?.items || [],
+          costume: costumeRes?.items || [],
+          horror: horrorRes?.items || [],
+          romance: romanceRes?.items || [],
+          hero: curatedHero, // Always populated
         });
       } catch (error) {
         console.error("Failed to fetch movies", error);
